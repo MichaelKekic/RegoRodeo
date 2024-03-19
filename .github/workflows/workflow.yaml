@@ -1,0 +1,53 @@
+name: Release Annotated WASM Policies
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Calculate New Version
+        id: versioning
+        run: |
+            LATEST_TAG=$(gh release list --limit 1 | awk '{print $1}')
+            MAJOR=$(echo $LATEST_TAG | cut -d '.' -f 1)
+            MINOR=$(echo $LATEST_TAG | cut -d '.' -f 2)
+            PATCH="0"
+            NEW_MINOR=$((MINOR+1))
+            NEW_VERSION="$MAJOR.$NEW_MINOR.$PATCH"
+            echo "New Version: $NEW_VERSION"
+            echo "::set-output name=version::$NEW_VERSION"
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.versioning.outputs.version }}
+          release_name: Release v${{ steps.versioning.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Find and Upload Annotated WASM Policies
+        run: |
+          files=$(find . -type f -name "*_annotated_policy.wasm")
+          for file in $files; do
+            echo "Uploading $file"
+            gh release upload ${{ steps.versioning.outputs.version }} "$file" --clobber
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
